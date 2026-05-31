@@ -1,0 +1,6 @@
+#!name=Reddit Hot Daily
+#!desc=每日抓取 Reddit 热门帖，并通过 Surge 本地通知推送，无需 Reddit API、无需 Bark
+#!arguments=SUBS=technology|programming|ChatGPT&LIMIT=10&TOP_N=5&MIN_SCORE=50
+
+[Script]
+Reddit Hot Daily = type=cron,cronexp="* * * * *",timeout=30,script-path=https://raw.githubusercontent.com/ml4985658-design/reddit-surge-push/main/reddit-hot-surge.js,argument="subs=%SUBS%&limit=%LIMIT%&topN=%TOP_N%&minScore=%MIN_SCORE%"
