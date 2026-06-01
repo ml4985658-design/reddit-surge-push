@@ -1,29 +1,36 @@
 var DEFAULT_SUBS = "technology|programming|ChatGPT";
-var DEFAULT_LIMIT = 10;
+var DEFAULT_LIMIT = 5;
 var DEFAULT_TOP_N = 5;
 var DEFAULT_MIN_SCORE = 0;
 var STORE_KEY = "reddit_hot_surge_seen_ids";
 var MAX_HISTORY = 300;
 
-var argText = typeof $argument === "undefined" ? "" : $argument;
-var args = parseArguments(argText);
-var subs = parseSubs(getArg("subs", "SUBS", DEFAULT_SUBS));
-var limit = parsePositiveInt(getArg("limit", "LIMIT", DEFAULT_LIMIT), DEFAULT_LIMIT);
-var topN = parsePositiveInt(getArg("topN", "TOP_N", DEFAULT_TOP_N), DEFAULT_TOP_N);
-var minScore = parseMinScore(getArg("minScore", "MIN_SCORE", DEFAULT_MIN_SCORE), DEFAULT_MIN_SCORE);
+var args = parseArguments(typeof $argument === "undefined" ? "" : $argument);
+var subs = parseSubs(getArg("subs", DEFAULT_SUBS));
+var limit = parsePositiveInt(getArg("limit", DEFAULT_LIMIT), DEFAULT_LIMIT);
+var topN = parsePositiveInt(getArg("topN", DEFAULT_TOP_N), DEFAULT_TOP_N);
+var minScore = parseNonNegativeInt(getArg("minScore", DEFAULT_MIN_SCORE), DEFAULT_MIN_SCORE);
 var seenIds = loadSeenIds();
 var seenMap = makeMap(seenIds);
 
+console.log("[RedditHotSurge] RSS 模式运行，minScore=" + minScore + " 会被忽略。");
+
 fetchAllSubreddits(subs, function (errors, posts) {
-  if (errors.length > 0) {
-    notifyRequestFailure(errors);
+  if (posts.length === 0 && errors.length === subs.length) {
+    var failedBody = errors.join("\n");
+    console.log("[RedditHotSurge] 所有 subreddit 抓取失败：" + failedBody);
+    $notification.post("Reddit Hot Daily 抓取失败", "所有 subreddit 都请求失败", failedBody);
+    $done();
+    return;
   }
 
-  var freshPosts = posts
-    .filter(function (post) {
-      return !seenMap[post.id];
-    });
+  if (errors.length > 0) {
+    console.log("[RedditHotSurge] 部分 subreddit 抓取失败：" + errors.join(" / "));
+  }
 
+  var freshPosts = posts.filter(function (post) {
+    return post.id && !seenMap[post.id];
+  });
   var selectedPosts = freshPosts.slice(0, topN);
 
   if (selectedPosts.length === 0) {
@@ -37,14 +44,8 @@ fetchAllSubreddits(subs, function (errors, posts) {
   $done();
 });
 
-function getArg(lowerKey, upperKey, fallback) {
-  if (args[lowerKey] !== undefined && args[lowerKey] !== "") {
-    return args[lowerKey];
-  }
-  if (args[upperKey] !== undefined && args[upperKey] !== "") {
-    return args[upperKey];
-  }
-  return fallback;
+function getArg(key, fallback) {
+  return args[key] !== undefined && args[key] !== "" ? args[key] : fallback;
 }
 
 function parseArguments(text) {
@@ -63,12 +64,13 @@ function parseArguments(text) {
     var index = pair.indexOf("=");
     var key = index >= 0 ? pair.slice(0, index) : pair;
     var value = index >= 0 ? pair.slice(index + 1) : "";
-    result[decodeValue(key)] = decodeValue(value);
+    result[decodeArgumentValue(key)] = decodeArgumentValue(value);
   }
+
   return result;
 }
 
-function decodeValue(value) {
+function decodeArgumentValue(value) {
   try {
     return decodeURIComponent(String(value).replace(/\+/g, "%20"));
   } catch (error) {
@@ -83,8 +85,9 @@ function parseSubs(value) {
 
   for (var i = 0; i < rawSubs.length; i++) {
     var sub = trim(rawSubs[i]).replace(/^\/?r\//i, "");
-    if (sub && !used[sub.toLowerCase()]) {
-      used[sub.toLowerCase()] = true;
+    var key = sub.toLowerCase();
+    if (sub && !used[key]) {
+      used[key] = true;
       result.push(sub);
     }
   }
@@ -97,7 +100,7 @@ function parsePositiveInt(value, fallback) {
   return isNaN(number) || number <= 0 ? fallback : number;
 }
 
-function parseMinScore(value, fallback) {
+function parseNonNegativeInt(value, fallback) {
   var number = parseInt(value, 10);
   return isNaN(number) || number < 0 ? fallback : number;
 }
@@ -167,7 +170,7 @@ function fetchAllSubreddits(list, callback) {
 
     var sub = list[index];
     index++;
-    fetchSubredditHot(sub, limit, function (error, posts) {
+    fetchSubredditRss(sub, limit, function (error, posts) {
       if (error) {
         errors.push(error);
       } else {
@@ -180,7 +183,7 @@ function fetchAllSubreddits(list, callback) {
   next();
 }
 
-function fetchSubredditHot(sub, postLimit, callback) {
+function fetchSubredditRss(sub, postLimit, callback) {
   var encodedSub = encodeURIComponent(sub);
   var urls = [
     "https://www.reddit.com/r/" + encodedSub + "/hot/.rss?limit=" + postLimit,
@@ -191,9 +194,7 @@ function fetchSubredditHot(sub, postLimit, callback) {
 
   function tryNextUrl() {
     if (index >= urls.length) {
-      var message = "r/" + sub + " all endpoints failed: " + failures.join(" / ");
-      console.log("[RedditHotSurge] " + message);
-      callback(message, []);
+      callback("r/" + sub + " RSS failed: " + failures.join(" / "), []);
       return;
     }
 
@@ -210,7 +211,7 @@ function fetchSubredditHot(sub, postLimit, callback) {
     }, function (error, response, data) {
       if (error) {
         failures.push("request error");
-        console.log("[RedditHotSurge] r/" + sub + " 请求失败，尝试下一个 endpoint：" + error);
+        console.log("[RedditHotSurge] r/" + sub + " 请求失败，尝试备用 RSS：" + error);
         tryNextUrl();
         return;
       }
@@ -218,16 +219,16 @@ function fetchSubredditHot(sub, postLimit, callback) {
       var status = response && (response.status || response.statusCode);
       if (status && (status < 200 || status >= 300)) {
         failures.push("HTTP " + status);
-        console.log("[RedditHotSurge] r/" + sub + " HTTP " + status + "，尝试下一个 endpoint。");
+        console.log("[RedditHotSurge] r/" + sub + " HTTP " + status + "，尝试备用 RSS。");
         tryNextUrl();
         return;
       }
 
       try {
-        callback(null, parseRedditRssPosts(sub, data));
+        callback(null, parseRssPosts(sub, data));
       } catch (parseError) {
         failures.push("RSS parse failed");
-        console.log("[RedditHotSurge] r/" + sub + " RSS 解析失败，尝试下一个 endpoint：" + parseError);
+        console.log("[RedditHotSurge] r/" + sub + " RSS 解析失败，尝试备用 RSS：" + parseError);
         tryNextUrl();
       }
     });
@@ -236,7 +237,7 @@ function fetchSubredditHot(sub, postLimit, callback) {
   tryNextUrl();
 }
 
-function parseRedditRssPosts(fallbackSub, xml) {
+function parseRssPosts(fallbackSub, xml) {
   var blocks = extractXmlBlocks(xml, "entry").concat(extractXmlBlocks(xml, "item"));
   var posts = [];
 
@@ -244,13 +245,15 @@ function parseRedditRssPosts(fallbackSub, xml) {
     var block = blocks[i];
     var title = getXmlText(block, "title");
     var link = getXmlLink(block);
+    var id = getXmlText(block, "id") || getXmlText(block, "guid") || link;
+
     if (!title || !link) {
       continue;
     }
 
     posts.push({
-      id: getXmlText(block, "id") || link,
-      subreddit: getXmlSubreddit(block, fallbackSub, link),
+      id: id,
+      subreddit: getSubredditFromLink(link, fallbackSub),
       title: title,
       score: 0,
       comments: 0,
@@ -284,30 +287,20 @@ function getXmlLink(block) {
   if (atomLink && atomLink[1]) {
     return decodeXml(atomLink[1]);
   }
-
   return getXmlText(block, "link");
 }
 
-function getXmlSubreddit(block, fallbackSub, link) {
-  var category = /<category\b[^>]*(?:term|label)=["'](?:r\/)?([^"']+)["']/i.exec(block);
-  if (category && category[1]) {
-    return cleanSubredditName(category[1], fallbackSub);
+function getSubredditFromLink(link, fallbackSub) {
+  var match = /\/r\/([^\/?#]+)/i.exec(link || "");
+  if (!match || !match[1]) {
+    return fallbackSub;
   }
 
-  var linkMatch = /\/r\/([^\/?#]+)/i.exec(link || "");
-  return linkMatch && linkMatch[1] ? cleanSubredditName(linkMatch[1], fallbackSub) : fallbackSub;
-}
-
-function cleanSubredditName(value, fallbackSub) {
-  var name = trim(decodeXml(value)).replace(/^r\//i, "");
-  var pathMatch = /\/r\/([^\/?#]+)/i.exec(name);
-  if (pathMatch && pathMatch[1]) {
-    name = pathMatch[1];
-  }
   try {
-    name = decodeURIComponent(name);
-  } catch (error) {}
-  return name || fallbackSub;
+    return decodeURIComponent(match[1]);
+  } catch (error) {
+    return match[1];
+  }
 }
 
 function cleanXmlText(value) {
@@ -333,22 +326,13 @@ function decodeXml(value) {
 function sendRedditNotification(posts) {
   var topPost = posts[0];
   var title = "Reddit 今日热门帖 · " + posts.length + " 条";
-  var subtitle = "最高：r/" + topPost.subreddit + " · 👍 " + topPost.score + " · 💬 " + topPost.comments;
+  var subtitle = "最高：r/" + topPost.subreddit + " · 👍 0 · 💬 0";
   var body = posts.map(function (post, index) {
-    return (index + 1) + ". r/" + post.subreddit + " · 👍 " + post.score + " · 💬 " + post.comments + "\n" + post.title;
+    return (index + 1) + ". r/" + post.subreddit + " · 👍 0 · 💬 0" + "\n" + post.title;
   }).join("\n\n");
 
   $notification.post(title, subtitle, body, {
     url: topPost.url
   });
-  console.log("[RedditHotSurge] 已推送 " + posts.length + " 条 Reddit 热门帖。");
-}
-
-function notifyRequestFailure(errors) {
-  var title = "Reddit Hot Daily 请求失败";
-  var subtitle = "有 " + errors.length + " 个 subreddit 抓取失败";
-  var body = errors.slice(0, 5).join("\n");
-
-  console.log("[RedditHotSurge] " + subtitle + "：" + body);
-  $notification.post(title, subtitle, body);
+  console.log("[RedditHotSurge] 已推送 " + posts.length + " 条 Reddit RSS 热门帖。");
 }
