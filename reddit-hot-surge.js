@@ -170,7 +170,7 @@ function fetchAllSubreddits(list, callback) {
 
     var sub = list[index];
     index++;
-    fetchSubreddit(sub, limit, function (error, posts) {
+    fetchSubredditHot(sub, limit, function (error, posts) {
       if (error) {
         errors.push(error);
       } else {
@@ -183,39 +183,66 @@ function fetchAllSubreddits(list, callback) {
   next();
 }
 
-function fetchSubreddit(sub, postLimit, callback) {
-  var url = "https://www.reddit.com/r/" + encodeURIComponent(sub) + "/hot.json?limit=" + postLimit;
-  var request = {
-    url: url,
-    headers: {
-      "User-Agent": "reddit-surge-push/1.0 (Surge Script)",
-      "Accept": "application/json"
-    }
-  };
+function fetchSubredditHot(sub, postLimit, callback) {
+  var encodedSub = encodeURIComponent(sub);
+  var urls = [
+    "https://www.reddit.com/r/" + encodedSub + "/hot/.json?limit=" + postLimit + "&raw_json=1",
+    "https://old.reddit.com/r/" + encodedSub + "/hot/.json?limit=" + postLimit + "&raw_json=1",
+    "https://www.reddit.com/r/" + encodedSub + ".json?limit=" + postLimit + "&raw_json=1",
+    "https://old.reddit.com/r/" + encodedSub + ".json?limit=" + postLimit + "&raw_json=1"
+  ];
+  var failures = [];
+  var index = 0;
 
-  $httpClient.get(request, function (error, response, data) {
-    if (error) {
-      console.log("[RedditHotSurge] r/" + sub + " 请求失败：" + error);
-      callback("r/" + sub + " 请求失败：" + error, []);
+  function tryNextUrl() {
+    if (index >= urls.length) {
+      var message = "r/" + sub + " all endpoints failed: " + failures.join(" / ");
+      console.log("[RedditHotSurge] " + message);
+      callback(message, []);
       return;
     }
 
-    var status = response && (response.status || response.statusCode);
-    if (status && (status < 200 || status >= 300)) {
-      console.log("[RedditHotSurge] r/" + sub + " HTTP 状态异常：" + status);
-      callback("r/" + sub + " HTTP " + status, []);
-      return;
-    }
+    var url = urls[index];
+    index++;
 
-    try {
-      var json = JSON.parse(data);
-      var children = json && json.data && json.data.children ? json.data.children : [];
-      callback(null, normalizePosts(sub, children));
-    } catch (parseError) {
-      console.log("[RedditHotSurge] r/" + sub + " JSON 解析失败：" + parseError);
-      callback("r/" + sub + " JSON 解析失败", []);
-    }
-  });
+    $httpClient.get({
+      url: url,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        "Accept": "application/json,text/plain,*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.reddit.com/",
+        "Cache-Control": "no-cache"
+      }
+    }, function (error, response, data) {
+      if (error) {
+        failures.push("request error");
+        console.log("[RedditHotSurge] r/" + sub + " 请求失败，尝试下一个 endpoint：" + error);
+        tryNextUrl();
+        return;
+      }
+
+      var status = response && (response.status || response.statusCode);
+      if (status && (status < 200 || status >= 300)) {
+        failures.push("HTTP " + status);
+        console.log("[RedditHotSurge] r/" + sub + " HTTP " + status + "，尝试下一个 endpoint。");
+        tryNextUrl();
+        return;
+      }
+
+      try {
+        var json = JSON.parse(data);
+        var children = json && json.data && json.data.children ? json.data.children : [];
+        callback(null, normalizePosts(sub, children));
+      } catch (parseError) {
+        failures.push("JSON parse failed");
+        console.log("[RedditHotSurge] r/" + sub + " JSON 解析失败，尝试下一个 endpoint：" + parseError);
+        tryNextUrl();
+      }
+    });
+  }
+
+  tryNextUrl();
 }
 
 function normalizePosts(fallbackSub, children) {
