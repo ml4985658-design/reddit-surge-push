@@ -1,12 +1,12 @@
 # reddit-surge-push
 
-这是一个给 iPhone Surge 使用的 Reddit 热门帖本地通知项目。
+这是一个给 iPhone Surge 使用的 Reddit 股票热门帖本地通知项目。
 
 现在不再让 Surge 直接请求 Reddit。原因是 iPhone Surge 直接访问 Reddit RSS/JSON 时容易遇到 `403`、`429` 或网络限制，模块会运行但抓不到内容。
 
 新的流程是：
 
-1. GitHub Actions 每天定时抓取 Reddit RSS。
+1. GitHub Actions 每天定时抓取 Reddit 股票相关 subreddit 的 RSS。
 2. GitHub Actions 把结果写入仓库里的 `reddit-hot.json`。
 3. iPhone Surge 只读取 GitHub Raw 上的 `reddit-hot.json`。
 4. Surge 用本地通知推送新帖子。
@@ -16,7 +16,7 @@
 ## 文件说明
 
 - `.github/workflows/update-reddit.yml`：GitHub Actions 定时任务，每天自动运行。
-- `fetch-reddit.js`：运行在 GitHub Actions 的 Node.js 脚本，负责抓 Reddit RSS 并生成 `reddit-hot.json`。
+- `fetch-reddit.js`：运行在 GitHub Actions 的 Node.js 脚本，负责抓 Reddit 股票 RSS 并生成 `reddit-hot.json`。
 - `reddit-hot.json`：静态数据文件，Surge 会读取它。
 - `surge-push.js`：运行在 Surge Script 的脚本，只读取 GitHub Raw JSON 并发送本地通知。
 - `RedditHotSurge.sgmodule`：Surge 模块文件。
@@ -24,15 +24,19 @@
 
 ## GitHub Actions 做什么
 
-GitHub Actions 会请求这些 Reddit RSS：
+GitHub Actions 会请求这些 Reddit 股票相关 RSS：
 
 ```text
-https://www.reddit.com/r/technology/hot/.rss?limit=5
-https://www.reddit.com/r/programming/hot/.rss?limit=5
-https://www.reddit.com/r/ChatGPT/hot/.rss?limit=5
+https://www.reddit.com/r/stocks/hot/.rss?limit=10
+https://www.reddit.com/r/investing/hot/.rss?limit=10
+https://www.reddit.com/r/wallstreetbets/hot/.rss?limit=10
+https://www.reddit.com/r/StockMarket/hot/.rss?limit=10
+https://www.reddit.com/r/options/hot/.rss?limit=10
 ```
 
 如果 `www.reddit.com` 失败，会自动尝试 `old.reddit.com`。
+
+脚本会优先保留标题里包含股票、市场、财报、交易、热门股票代码、通胀、利率等关键词的帖子。如果关键词过滤后不足 5 条，会用原始 hot 列表补足到 5 条。
 
 抓取成功后，它会更新：
 
