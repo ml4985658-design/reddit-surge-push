@@ -21,10 +21,7 @@ fetchAllSubreddits(subs, function (errors, posts) {
 
   var freshPosts = posts
     .filter(function (post) {
-      return post.score >= minScore && !seenMap[post.id];
-    })
-    .sort(function (a, b) {
-      return b.score - a.score;
+      return !seenMap[post.id];
     });
 
   var selectedPosts = freshPosts.slice(0, topN);
@@ -186,10 +183,8 @@ function fetchAllSubreddits(list, callback) {
 function fetchSubredditHot(sub, postLimit, callback) {
   var encodedSub = encodeURIComponent(sub);
   var urls = [
-    "https://www.reddit.com/r/" + encodedSub + "/hot/.json?limit=" + postLimit + "&raw_json=1",
-    "https://old.reddit.com/r/" + encodedSub + "/hot/.json?limit=" + postLimit + "&raw_json=1",
-    "https://www.reddit.com/r/" + encodedSub + ".json?limit=" + postLimit + "&raw_json=1",
-    "https://old.reddit.com/r/" + encodedSub + ".json?limit=" + postLimit + "&raw_json=1"
+    "https://www.reddit.com/r/" + encodedSub + "/hot/.rss?limit=" + postLimit,
+    "https://old.reddit.com/r/" + encodedSub + "/hot/.rss?limit=" + postLimit
   ];
   var failures = [];
   var index = 0;
@@ -209,10 +204,8 @@ function fetchSubredditHot(sub, postLimit, callback) {
       url: url,
       headers: {
         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-        "Accept": "application/json,text/plain,*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.reddit.com/",
-        "Cache-Control": "no-cache"
+        "Accept": "application/rss+xml,application/xml,text/xml,*/*",
+        "Accept-Language": "en-US,en;q=0.9"
       }
     }, function (error, response, data) {
       if (error) {
@@ -231,12 +224,10 @@ function fetchSubredditHot(sub, postLimit, callback) {
       }
 
       try {
-        var json = JSON.parse(data);
-        var children = json && json.data && json.data.children ? json.data.children : [];
-        callback(null, normalizePosts(sub, children));
+        callback(null, parseRedditRssPosts(sub, data));
       } catch (parseError) {
-        failures.push("JSON parse failed");
-        console.log("[RedditHotSurge] r/" + sub + " JSON 解析失败，尝试下一个 endpoint：" + parseError);
+        failures.push("RSS parse failed");
+        console.log("[RedditHotSurge] r/" + sub + " RSS 解析失败，尝试下一个 endpoint：" + parseError);
         tryNextUrl();
       }
     });
@@ -245,27 +236,98 @@ function fetchSubredditHot(sub, postLimit, callback) {
   tryNextUrl();
 }
 
-function normalizePosts(fallbackSub, children) {
+function parseRedditRssPosts(fallbackSub, xml) {
+  var blocks = extractXmlBlocks(xml, "entry").concat(extractXmlBlocks(xml, "item"));
   var posts = [];
 
-  for (var i = 0; i < children.length; i++) {
-    var item = children[i] && children[i].data ? children[i].data : {};
-    if (!item.id || !item.title) {
+  for (var i = 0; i < blocks.length; i++) {
+    var block = blocks[i];
+    var title = getXmlText(block, "title");
+    var link = getXmlLink(block);
+    if (!title || !link) {
       continue;
     }
 
-    var redditPath = item.permalink || "/r/" + fallbackSub + "/comments/" + item.id;
     posts.push({
-      id: item.name || item.id,
-      subreddit: item.subreddit || fallbackSub,
-      title: item.title,
-      score: Number(item.score) || 0,
-      comments: Number(item.num_comments) || 0,
-      url: "https://www.reddit.com" + redditPath
+      id: getXmlText(block, "id") || link,
+      subreddit: getXmlSubreddit(block, fallbackSub, link),
+      title: title,
+      score: 0,
+      comments: 0,
+      url: link
     });
   }
 
   return posts;
+}
+
+function extractXmlBlocks(xml, tagName) {
+  var blocks = [];
+  var pattern = new RegExp("<" + tagName + "\\b[\\s\\S]*?<\\/" + tagName + ">", "gi");
+  var match;
+
+  while ((match = pattern.exec(String(xml || ""))) !== null) {
+    blocks.push(match[0]);
+  }
+
+  return blocks;
+}
+
+function getXmlText(block, tagName) {
+  var pattern = new RegExp("<" + tagName + "\\b[^>]*>([\\s\\S]*?)<\\/" + tagName + ">", "i");
+  var match = pattern.exec(block);
+  return match ? cleanXmlText(match[1]) : "";
+}
+
+function getXmlLink(block) {
+  var atomLink = /<link\b[^>]*\bhref=["']([^"']+)["'][^>]*\/?>/i.exec(block);
+  if (atomLink && atomLink[1]) {
+    return decodeXml(atomLink[1]);
+  }
+
+  return getXmlText(block, "link");
+}
+
+function getXmlSubreddit(block, fallbackSub, link) {
+  var category = /<category\b[^>]*(?:term|label)=["'](?:r\/)?([^"']+)["']/i.exec(block);
+  if (category && category[1]) {
+    return cleanSubredditName(category[1], fallbackSub);
+  }
+
+  var linkMatch = /\/r\/([^\/?#]+)/i.exec(link || "");
+  return linkMatch && linkMatch[1] ? cleanSubredditName(linkMatch[1], fallbackSub) : fallbackSub;
+}
+
+function cleanSubredditName(value, fallbackSub) {
+  var name = trim(decodeXml(value)).replace(/^r\//i, "");
+  var pathMatch = /\/r\/([^\/?#]+)/i.exec(name);
+  if (pathMatch && pathMatch[1]) {
+    name = pathMatch[1];
+  }
+  try {
+    name = decodeURIComponent(name);
+  } catch (error) {}
+  return name || fallbackSub;
+}
+
+function cleanXmlText(value) {
+  var text = String(value || "").replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "");
+  return trim(decodeXml(text.replace(/<[^>]+>/g, "")));
+}
+
+function decodeXml(value) {
+  return String(value || "")
+    .replace(/&#x([0-9a-f]+);/gi, function (_, hex) {
+      return String.fromCharCode(parseInt(hex, 16));
+    })
+    .replace(/&#(\d+);/g, function (_, number) {
+      return String.fromCharCode(parseInt(number, 10));
+    })
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
 }
 
 function sendRedditNotification(posts) {
