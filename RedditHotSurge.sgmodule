@@ -2,4 +2,4 @@
 #!desc=从 GitHub Raw 读取 Reddit 热门帖，并通过 Surge 本地通知推送
 
 [Script]
-Reddit Hot Daily = type=cron,cronexp="* * * * *",timeout=30,script-path=https://raw.githubusercontent.com/ml4985658-design/reddit-surge-push/main/surge-push.js
+Reddit Hot Daily = type=cron,cronexp="0 9 * * *",timeout=30,script-path=https://raw.githubusercontent.com/ml4985658-design/reddit-surge-push/main/surge-push.js
