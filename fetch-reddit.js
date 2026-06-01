@@ -1,10 +1,35 @@
 const fs = require("node:fs/promises");
 
-const SUBREDDITS = ["technology", "programming", "ChatGPT"];
-const LIMIT_PER_SUB = 5;
-const MAX_POSTS = 10;
+const SUBREDDITS = ["stocks", "investing", "wallstreetbets", "StockMarket", "options"];
+const LIMIT_PER_SUB = 10;
+const MAX_POSTS = 5;
 const OUTPUT_FILE = "reddit-hot.json";
 const SAFARI_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+const KEYWORDS = [
+  "stock",
+  "stocks",
+  "market",
+  "earnings",
+  "shares",
+  "investing",
+  "trading",
+  "nvda",
+  "tsla",
+  "aapl",
+  "msft",
+  "amzn",
+  "googl",
+  "meta",
+  "spy",
+  "qqq",
+  "fed",
+  "rate",
+  "cpi",
+  "inflation",
+  "recession",
+  "bull",
+  "bear"
+];
 
 main().catch((error) => {
   console.error("[fetch-reddit] failed:", error);
@@ -30,26 +55,39 @@ async function main() {
     throw new Error(`all subreddits failed: ${errors.join(" / ")}`);
   }
 
-  const seen = new Set();
-  const posts = [];
-  for (const post of allPosts) {
-    if (!post.id || seen.has(post.id)) {
-      continue;
-    }
-    seen.add(post.id);
-    posts.push(post);
-    if (posts.length >= MAX_POSTS) {
-      break;
-    }
-  }
+  const uniquePosts = dedupePosts(allPosts);
+  const preferredPosts = uniquePosts.filter((post) => hasStockKeyword(post.title));
+  const posts = dedupePosts(preferredPosts.concat(uniquePosts)).slice(0, MAX_POSTS);
 
   const data = {
     updatedAt: new Date().toISOString(),
+    topic: "stocks",
     posts
   };
 
   await fs.writeFile(OUTPUT_FILE, JSON.stringify(data, null, 2) + "\n", "utf8");
   console.log(`[fetch-reddit] wrote ${posts.length} posts to ${OUTPUT_FILE}`);
+}
+
+function dedupePosts(posts) {
+  const seen = new Set();
+  const result = [];
+
+  for (const post of posts) {
+    const key = post.id || post.url;
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(post);
+  }
+
+  return result;
+}
+
+function hasStockKeyword(title) {
+  const normalizedTitle = String(title || "").toLowerCase();
+  return KEYWORDS.some((keyword) => normalizedTitle.includes(keyword));
 }
 
 async function fetchSubredditRss(sub, limit) {
