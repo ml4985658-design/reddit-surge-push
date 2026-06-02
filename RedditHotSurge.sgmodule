@@ -5,3 +5,4 @@
 
 [Script]
 Reddit Hot Daily = type=cron,cronexp="{{{定时启动}}}",timeout=30,script-path=https://raw.githubusercontent.com/ml4985658-design/reddit-surge-push/main/surge-push.js
+
