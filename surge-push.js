@@ -40,7 +40,7 @@ function pushTopPosts(payload) {
   var topPosts = posts.slice(0, TOP_N);
 
   if (topPosts.length === 0) {
-    console.log("[RedditHotSurge] reddit-hot.json 里 posts 为空，未推送。");
+    console.log("[RedditHotSurge] reddit-hot.json 里 posts 为空。");
     $notification.post("Reddit Hot Daily", "没有可推送的帖子", "reddit-hot.json 里 posts 为空");
     $done();
     return;
