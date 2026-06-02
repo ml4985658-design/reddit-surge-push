@@ -51,8 +51,8 @@ function pushTopPosts(payload) {
   var subtitle = "最新：r/" + (first.subreddit || "stocks");
 
   var body = topPosts.map(function (post, index) {
-    return (index + 1) + ". r/" + (post.subreddit || "stocks") + "\\n" + (post.title || "(无标题)");
-  }).join("\\n\\n");
+    return (index + 1) + ". r/" + (post.subreddit || "stocks") + "\n" + (post.title || "(无标题)");
+  }).join("\n\n");
 
   var url = first.url || JSON_URL;
 
