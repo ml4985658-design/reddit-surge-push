@@ -1,5 +1,4 @@
 var JSON_URL = "https://raw.githubusercontent.com/ml4985658-design/reddit-surge-push/main/reddit-hot.json";
-var STORE_KEY = "reddit_hot_surge_last_updated_at";
 var TOP_N = 5;
 
 $httpClient.get({
@@ -7,7 +6,8 @@ $httpClient.get({
   headers: {
     "Accept": "application/json,text/plain,*/*",
     "Cache-Control": "no-cache"
-  }
+  },
+  timeout: 20
 }, function (error, response, data) {
   if (error) {
     console.log("[RedditHotSurge] 请求 reddit-hot.json 失败：" + error);
@@ -27,78 +27,39 @@ $httpClient.get({
   try {
     var payload = JSON.parse(data);
     pushTopPosts(payload);
-  } catch (parseError) {
-    console.log("[RedditHotSurge] JSON 解析失败：" + parseError);
-    $notification.post("Reddit Hot Daily 抓取失败", "reddit-hot.json 解析失败", String(parseError));
+  } catch (e) {
+    console.log("[RedditHotSurge] JSON 解析失败：" + e);
+    $notification.post("Reddit Hot Daily 抓取失败", "reddit-hot.json 解析失败", String(e));
     $done();
   }
 });
 
 function pushTopPosts(payload) {
   payload = payload || {};
-  var updatedAt = String(payload.updatedAt || "");
   var posts = Array.isArray(payload.posts) ? payload.posts : [];
-  var topPosts = [];
-
-  for (var i = 0; i < posts.length; i++) {
-    var post = normalizePost(posts[i]);
-    topPosts.push(post);
-    if (topPosts.length >= TOP_N) {
-      break;
-    }
-  }
+  var topPosts = posts.slice(0, TOP_N);
 
   if (topPosts.length === 0) {
     console.log("[RedditHotSurge] reddit-hot.json 里 posts 为空，未推送。");
+    $notification.post("Reddit Hot Daily", "没有可推送的帖子", "reddit-hot.json 里 posts 为空");
     $done();
     return;
   }
 
-  if (updatedAt) {
-    var lastUpdatedAt = $persistentStore.read(STORE_KEY);
-    if (lastUpdatedAt === updatedAt) {
-      console.log("[RedditHotSurge] updatedAt 未变化，今天这批帖子已推送过：" + updatedAt);
-      $done();
-      return;
-    }
-  }
+  var first = topPosts[0];
+  var title = "Reddit 股票热门帖 · " + topPosts.length + " 条";
+  var subtitle = "最新：r/" + (first.subreddit || "stocks");
 
-  sendNotification(topPosts);
-  saveLastUpdatedAt(updatedAt);
-  $done();
-}
+  var body = topPosts.map(function (post, index) {
+    return (index + 1) + ". r/" + (post.subreddit || "stocks") + "\\n" + (post.title || "(无标题)");
+  }).join("\\n\\n");
 
-function normalizePost(post) {
-  post = post || {};
-  return {
-    subreddit: String(post.subreddit || "reddit"),
-    title: String(post.title || "(无标题)"),
-    url: String(post.url || JSON_URL)
-  };
-}
-
-function saveLastUpdatedAt(updatedAt) {
-  if (!updatedAt) {
-    console.log("[RedditHotSurge] reddit-hot.json 没有 updatedAt，本次不保存推送批次。");
-    return;
-  }
-
-  var ok = $persistentStore.write(updatedAt, STORE_KEY);
-  if (!ok) {
-    console.log("[RedditHotSurge] persistentStore 保存 updatedAt 失败，后续可能重复推送。");
-  }
-}
-
-function sendNotification(posts) {
-  var topPost = posts[0];
-  var title = "Reddit 股票热门帖 · " + posts.length + " 条";
-  var subtitle = "最新：r/" + topPost.subreddit;
-  var body = posts.map(function (post, index) {
-    return (index + 1) + ". r/" + post.subreddit + "\n" + post.title;
-  }).join("\n\n");
+  var url = first.url || JSON_URL;
 
   $notification.post(title, subtitle, body, {
-    url: topPost.url
+    url: url
   });
-  console.log("[RedditHotSurge] 已推送 " + posts.length + " 条 Reddit 股票热门帖。");
+
+  console.log("[RedditHotSurge] 已推送 " + topPosts.length + " 条 Reddit 股票热门帖。");
+  $done();
 }
