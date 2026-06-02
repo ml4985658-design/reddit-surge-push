@@ -1,6 +1,5 @@
 var JSON_URL = "https://raw.githubusercontent.com/ml4985658-design/reddit-surge-push/main/reddit-hot.json";
-var STORE_KEY = "reddit_hot_surge_seen_ids";
-var MAX_HISTORY = 300;
+var STORE_KEY = "reddit_hot_surge_last_updated_at";
 var TOP_N = 5;
 
 $httpClient.get({
@@ -27,8 +26,7 @@ $httpClient.get({
 
   try {
     var payload = JSON.parse(data);
-    var posts = Array.isArray(payload.posts) ? payload.posts : [];
-    pushNewPosts(posts);
+    pushTopPosts(payload);
   } catch (parseError) {
     console.log("[RedditHotSurge] JSON 解析失败：" + parseError);
     $notification.post("Reddit Hot Daily 抓取失败", "reddit-hot.json 解析失败", String(parseError));
@@ -36,94 +34,64 @@ $httpClient.get({
   }
 });
 
-function pushNewPosts(posts) {
-  var seenIds = loadSeenIds();
-  var seenMap = makeMap(seenIds);
-  var freshPosts = [];
+function pushTopPosts(payload) {
+  payload = payload || {};
+  var updatedAt = String(payload.updatedAt || "");
+  var posts = Array.isArray(payload.posts) ? payload.posts : [];
+  var topPosts = [];
 
   for (var i = 0; i < posts.length; i++) {
     var post = normalizePost(posts[i]);
-    if (!post.id || seenMap[post.id]) {
-      continue;
-    }
-    freshPosts.push(post);
-    if (freshPosts.length >= TOP_N) {
+    topPosts.push(post);
+    if (topPosts.length >= TOP_N) {
       break;
     }
   }
 
-  if (freshPosts.length === 0) {
-    console.log("[RedditHotSurge] 当前没有新帖子，未推送。");
+  if (topPosts.length === 0) {
+    console.log("[RedditHotSurge] reddit-hot.json 里 posts 为空，未推送。");
     $done();
     return;
   }
 
-  sendNotification(freshPosts);
-  saveSeenIds(freshPosts, seenIds);
+  if (updatedAt) {
+    var lastUpdatedAt = $persistentStore.read(STORE_KEY);
+    if (lastUpdatedAt === updatedAt) {
+      console.log("[RedditHotSurge] updatedAt 未变化，今天这批帖子已推送过：" + updatedAt);
+      $done();
+      return;
+    }
+  }
+
+  sendNotification(topPosts);
+  saveLastUpdatedAt(updatedAt);
   $done();
 }
 
 function normalizePost(post) {
   post = post || {};
   return {
-    id: String(post.id || post.url || ""),
     subreddit: String(post.subreddit || "reddit"),
-    title: String(post.title || ""),
+    title: String(post.title || "(无标题)"),
     url: String(post.url || JSON_URL)
   };
 }
 
-function loadSeenIds() {
-  var raw = $persistentStore.read(STORE_KEY);
-  if (!raw) {
-    return [];
+function saveLastUpdatedAt(updatedAt) {
+  if (!updatedAt) {
+    console.log("[RedditHotSurge] reddit-hot.json 没有 updatedAt，本次不保存推送批次。");
+    return;
   }
 
-  try {
-    var parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.slice(0, MAX_HISTORY) : [];
-  } catch (error) {
-    console.log("[RedditHotSurge] 读取历史记录失败：" + error);
-    return [];
-  }
-}
-
-function saveSeenIds(posts, oldIds) {
-  var merged = [];
-  var used = {};
-
-  for (var i = 0; i < posts.length; i++) {
-    addId(posts[i].id);
-  }
-  for (var j = 0; j < oldIds.length; j++) {
-    addId(oldIds[j]);
-  }
-
-  var ok = $persistentStore.write(JSON.stringify(merged), STORE_KEY);
+  var ok = $persistentStore.write(updatedAt, STORE_KEY);
   if (!ok) {
-    console.log("[RedditHotSurge] persistentStore 保存失败，后续可能重复推送。");
+    console.log("[RedditHotSurge] persistentStore 保存 updatedAt 失败，后续可能重复推送。");
   }
-
-  function addId(id) {
-    if (!id || used[id] || merged.length >= MAX_HISTORY) {
-      return;
-    }
-    used[id] = true;
-    merged.push(id);
-  }
-}
-
-function makeMap(list) {
-  var map = {};
-  for (var i = 0; i < list.length; i++) {
-    map[list[i]] = true;
-  }
-  return map;
 }
 
 function sendNotification(posts) {
   var topPost = posts[0];
-  var title = "Reddit 今日热门帖 · " + posts.length + " 条";
+  var title = "Reddit 股票热门帖 · " + posts.length + " 条";
   var subtitle = "最新：r/" + topPost.subreddit;
   var body = posts.map(function (post, index) {
     return (index + 1) + ". r/" + post.subreddit + "\n" + post.title;
@@ -132,5 +100,5 @@ function sendNotification(posts) {
   $notification.post(title, subtitle, body, {
     url: topPost.url
   });
-  console.log("[RedditHotSurge] 已推送 " + posts.length + " 条 Reddit 热门帖。");
+  console.log("[RedditHotSurge] 已推送 " + posts.length + " 条 Reddit 股票热门帖。");
 }
