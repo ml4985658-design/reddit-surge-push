@@ -1,0 +1,7 @@
+#!name=Reddit Hot Daily
+#!desc=从 GitHub Raw 读取 Reddit 股票热门帖，并通过 Surge 本地通知推送
+#!arguments=定时启动:0 9 * * *
+#!arguments-desc=定时启动：Cron 表达式，例如 0 9 * * * 表示每天早上 9 点执行。
+
+[Script]
+Reddit Hot Daily = type=cron,cronexp="{{{定时启动}}}",timeout=30,script-path=https://raw.githubusercontent.com/ml4985658-design/reddit-surge-push/main/surge-push.js
