@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-04T09:57:21.645Z",
+  "updatedAt": "2026-07-05T10:01:05.969Z",
   "topic": "stocks",
   "posts": [
     {
@@ -15,22 +15,22 @@
       "url": "https://www.reddit.com/r/stocks/comments/1un4o3l/rstocks_weekend_discussion_saturday_jul_04_2026/"
     },
     {
-      "id": "t3_1umnxm8",
+      "id": "t3_1uns8lb",
       "subreddit": "stocks",
-      "title": "Meta's full arc this week: +9% on cloud hype and -5% on Zuck's own AI comments.",
-      "url": "https://www.reddit.com/r/stocks/comments/1umnxm8/metas_full_arc_this_week_9_on_cloud_hype_and_5_on/"
-    },
-    {
-      "id": "t3_1umczn8",
-      "subreddit": "stocks",
-      "title": "Which stocks would you buy if the Nasdaq dropped 25%?",
-      "url": "https://www.reddit.com/r/stocks/comments/1umczn8/which_stocks_would_you_buy_if_the_nasdaq_dropped/"
+      "title": "Don’t ask for advice of stocks in their own subreddit",
+      "url": "https://www.reddit.com/r/stocks/comments/1uns8lb/dont_ask_for_advice_of_stocks_in_their_own/"
     },
     {
       "id": "t3_1un26ls",
       "subreddit": "stocks",
       "title": "Thoughts on Nintendo and Sony stocks?",
       "url": "https://www.reddit.com/r/stocks/comments/1un26ls/thoughts_on_nintendo_and_sony_stocks/"
+    },
+    {
+      "id": "t3_1umnxm8",
+      "subreddit": "stocks",
+      "title": "Meta's full arc this week: +9% on cloud hype and -5% on Zuck's own AI comments.",
+      "url": "https://www.reddit.com/r/stocks/comments/1umnxm8/metas_full_arc_this_week_9_on_cloud_hype_and_5_on/"
     }
   ]
 }
