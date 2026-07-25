@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-07-24T10:03:44.300Z",
+  "updatedAt": "2026-07-25T09:24:15.668Z",
   "topic": "stocks",
   "posts": [
     {
@@ -15,22 +15,22 @@
       "url": "https://www.reddit.com/r/stocks/comments/1v56gxq/rstocks_daily_discussion_fundamentals_friday_jul/"
     },
     {
+      "id": "t3_1v5ey3y",
+      "subreddit": "stocks",
+      "title": "Intel stock is up 324% in a year, revenue grew 25%. But foundry is only 5% external revenue and the net loss came from it own stock surge",
+      "url": "https://www.reddit.com/r/stocks/comments/1v5ey3y/intel_stock_is_up_324_in_a_year_revenue_grew_25/"
+    },
+    {
       "id": "t3_1v4rdvj",
       "subreddit": "stocks",
       "title": "Google Discloses $94.1 Billion in SpaceX Stock, Marking 6% Stake",
       "url": "https://www.reddit.com/r/stocks/comments/1v4rdvj/google_discloses_941_billion_in_spacex_stock/"
     },
     {
-      "id": "t3_1v4jx6p",
+      "id": "t3_1v5ldh6",
       "subreddit": "stocks",
-      "title": "Short sellers notch $15.5 billion profit as SpaceX shares slide",
-      "url": "https://www.reddit.com/r/stocks/comments/1v4jx6p/short_sellers_notch_155_billion_profit_as_spacex/"
-    },
-    {
-      "id": "t3_1v4si8t",
-      "subreddit": "stocks",
-      "title": "Shortsighted stock market can no longer brush off war: ‘It’s too hard to ignore $100 oil’",
-      "url": "https://www.reddit.com/r/stocks/comments/1v4si8t/shortsighted_stock_market_can_no_longer_brush_off/"
+      "title": "SAP Second-Quarter Revenue Up on Cloud Business Results (stock up almost 10%)",
+      "url": "https://www.reddit.com/r/stocks/comments/1v5ldh6/sap_secondquarter_revenue_up_on_cloud_business/"
     }
   ]
 }
